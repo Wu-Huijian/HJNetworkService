@@ -17,6 +17,8 @@
     NSArray *downloadURLs;
     
     NSArray *downloadModels;
+    
+    NSArray *optTitles;
 }
 
 
@@ -64,6 +66,32 @@ static  NSString * const cellIdentifier = @"HJDownloadCell";
     [models removeObjectAtIndex:0];
     [[HJDownloadManager sharedManager] addDownloadModels:models];
     downloadModels = [HJDownloadManager sharedManager].downloadModels;
+    optTitles = @[@"全部开始",@"全部暂停",@"全部取消"];
+    NSArray *sels = @[@"startAll:",@"pauseAll:",@"cancelAll:"];
+    
+    for (int i = 0; i<optTitles.count; i++) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        btn.frame = CGRectMake(10+i*90+20, 300, 90, 44);
+        [btn setTitle:optTitles[i] forState:UIControlStateNormal];
+        [btn addTarget:self action:NSSelectorFromString(sels[i]) forControlEvents:UIControlEventTouchUpInside];
+        [self.view insertSubview:btn aboveSubview:self.tableView];
+    }
+}
+
+- (void)startAll:(UIButton *)sender{
+    [kHJDownloadManager startAllDownloadTasks];
+
+}
+
+
+- (void)pauseAll:(UIButton *)sender{
+    [kHJDownloadManager suspendAllDownloadTasks];
+}
+
+
+- (void)cancelAll:(UIButton *)sender{
+    [kHJDownloadManager stopAllDownloadTasks];
+
 }
 
 - (void)setupUI{
@@ -76,7 +104,6 @@ static  NSString * const cellIdentifier = @"HJDownloadCell";
     [self.view addSubview:tableView];
     [tableView registerClass:[HJDownloadCell class] forCellReuseIdentifier:cellIdentifier];
     self.tableView = tableView;
-
 }
 
 
@@ -89,17 +116,18 @@ static  NSString * const cellIdentifier = @"HJDownloadCell";
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath{
     HJDownloadCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
     
-    HJDownloadModel *downloadModel = downloadModels[indexPath.row];
-    cell.downloadModel = downloadModel;
-    
-    downloadModel.progressChanged = ^(HJDownloadModel *downloadModel){
+        HJDownloadModel *downloadModel = downloadModels[indexPath.row];
         cell.downloadModel = downloadModel;
-    };
-    
-    
-    downloadModel.statusChanged = ^(HJDownloadModel *downloadModel){
-        cell.downloadModel = downloadModel;
-    };
+        
+        downloadModel.progressChanged = ^(HJDownloadModel *downloadModel){
+            cell.downloadModel = downloadModel;
+        };
+        
+        
+        downloadModel.statusChanged = ^(HJDownloadModel *downloadModel){
+            cell.downloadModel = downloadModel;
+        };
+ 
     
     return cell;
 }

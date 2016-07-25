@@ -41,7 +41,7 @@ static NSString * const kIsFinished = @"isFinished";
 
 MJCodingImplementation
 
--(instancetype)initWithDownloadModel:(HJDownloadModel *)downloadModel andSession:(NSURLSession *)session{
+- (instancetype)initWithDownloadModel:(HJDownloadModel *)downloadModel andSession:(NSURLSession *)session{
     self = [super init];
     if (self) {
         self.downloadModel = downloadModel;
@@ -90,6 +90,11 @@ MJCodingImplementation
 
 
 - (void)suspend{
+    
+//    if (self.downloadModel.status != kHJDownloadStatus_Running) {
+//        return;
+//    }
+//    
     if(self.downloadTask){
         __weak __typeof(self)weakSelf = self;
         __block NSURLSessionDownloadTask *weakTask = self.downloadTask;
@@ -99,7 +104,11 @@ MJCodingImplementation
             //FIXME: 文件保存
             //保存已下载数据
             weakSelf.downloadModel.resumeData = resumeData;
-//            [weakSelf moveDownloadFileWith:self.downloadTask];
+            
+//            [[[NSUserDefaults standardUserDefaults] objectForKey:hj_UIApplicationWillTerminate] boolValue]
+//             [[NSUserDefaults standardUserDefaults] synchronize];
+
+            [weakSelf moveDownloadFileWith:self.downloadTask];
         
             //置空下载任务
             weakTask = nil;
@@ -112,6 +121,8 @@ MJCodingImplementation
         }];
         
         [self.downloadTask suspend];
+    }else{
+        NSLog(@"任务不存在");
     }
 }
 
@@ -125,15 +136,24 @@ MJCodingImplementation
     if (self.downloadModel.resumeData) {//恢复下载
         
         NSFileManager *fileManager = [NSFileManager defaultManager];
-        if ([fileManager fileExistsAtPath:self.downloadModel.destinationPath isDirectory:nil]) {
+        NSLog(@"文件路径：%@",self.downloadModel.destinationPath);
+        
+        if ([fileManager fileExistsAtPath:self.downloadModel.destinationPath]) {
             NSError *error = nil;
-            [fileManager moveItemAtPath:self.downloadModel.destinationPath toPath:self.downloadModel.tmpFilePath error:&error];
-            NSLog(@"%@",error);
+            [fileManager moveItemAtPath:self.downloadModel.destinationPath
+                                 toPath:self.downloadModel.tmpFilePath
+                                  error:&error];
+        }
+        
+        if (!self.session) {//未做归档，所以重设
+            self.session = [HJDownloadManager sharedManager].currentSession;
         }
         
         self.downloadTask = [self.session downloadTaskWithResumeData:self.downloadModel.resumeData];
+        
+        
         [self setupDownloadTask];
-    }else if (!self.downloadTask || (self.downloadTask.state == NSURLSessionTaskStateCompleted && self.downloadModel.progress<1.0 )){//开始下载
+    }else if (!self.downloadTask || (self.downloadTask.state == NSURLSessionTaskStateCompleted && self.downloadModel.progress < 1.0 )){//开始下载
         [self startRequest];
     }
     
@@ -231,6 +251,7 @@ MJCodingImplementation
         [super cancel];
         [self.downloadTask cancel];
         self.downloadTask = nil;
+        self.downloadModel.status = kHJDownloadStatusCancel;
     });
     
     [self completeOperation];
@@ -262,13 +283,16 @@ MJCodingImplementation
                     id downloadFilepropertyValue = [propertyValue valueForKey:(NSString *)downloadFilepropertyName];
                     downloadTask.downloadModel.tmpFilePath = downloadFilepropertyValue;
                     NSError *error = nil;
-                    NSFileManager *fileManager = [NSFileManager defaultManager];
-                    [fileManager moveItemAtPath:downloadFilepropertyValue toPath:downloadTask.downloadModel.destinationPath error:&error];
-                    
-                    if (error) {
-                        NSLog(@"暂停下载:%@",error);
-                    }else{
-                        NSLog(@"暂停下载，文件移动成功!");
+                    if (downloadFilepropertyName) {
+                        NSFileManager *fileManager = [NSFileManager defaultManager];
+                        [fileManager moveItemAtPath:downloadFilepropertyValue toPath:downloadTask.downloadModel.destinationPath error:&error];
+                        
+                        if (error) {
+                            NSLog(@"暂停下载:%@",error);
+                        }else{
+                            NSLog(@"暂停下载，文件移动成功!");
+                        }
+
                     }
                     break;
                 }

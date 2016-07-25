@@ -7,10 +7,8 @@
 //
 
 #import "HJDownloadManager.h"
-#import "HJDownloadModel.h"
-#import "HJDownloadOperation.h"
-#import "NSURLSessionTask+HJModel.h"
 #import "AppDelegate.h"
+#import "HJDownloadHeaders.h"
 
 @interface HJDownloadManager ()<NSURLSessionDownloadDelegate>{
     NSMutableArray *_downloadModels;
@@ -28,7 +26,7 @@
 
 @end
 
-#define  hj_savedDownloadModelsFilePath [[NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) objectAtIndex:0] stringByAppendingFormat:@"/Caches/hj_savedDownloadModels"]
+
 
 @implementation HJDownloadManager
 
@@ -40,7 +38,10 @@ static id instace = nil;
     if (instace == nil) { 
         static dispatch_once_t onceToken; 
         dispatch_once(&onceToken, ^{ 
-            instace = [super allocWithZone:zone]; 
+            instace = [super allocWithZone:zone];
+            [[NSNotificationCenter defaultCenter] addObserver:instace selector:@selector(saveDownloadModels) name:UIApplicationWillTerminateNotification object:nil];
+            [[NSUserDefaults standardUserDefaults] setObject:@NO forKey:hj_UIApplicationWillTerminate];
+            [[NSUserDefaults standardUserDefaults] synchronize];
         }); 
     } 
     return instace; 
@@ -88,19 +89,22 @@ static id instace = nil;
 
 
 
-- (void)startWithDownloadModel:(HJDownloadModel *)model background:(BOOL)background{
+- (void)startWithDownloadModel:(HJDownloadModel *)model{
+    
+    if (model.status == kHJDownloadStatus_Running) {
+        return;
+    }
+    
     if (model.status != kHJDownloadStatusCompleted) {
         model.status = kHJDownloadStatus_Running;
     }
 
     if (model.operation == nil) {
-        model.operation = [[HJDownloadOperation alloc]initWithDownloadModel:model andSession:background?self.backgroundSession:self.session];
+        model.operation = [[HJDownloadOperation alloc]initWithDownloadModel:model andSession:self.backgroundDownload?self.backgroundSession:self.session];
         [self.queue addOperation:model.operation];
         [model.operation start];
     }else{
         [model.operation resume];
-        
-
     }
     
 }
@@ -126,15 +130,11 @@ static id instace = nil;
     }
 }
 
-- (void)saveDownloadModels{
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(saveData) name:@"kNotificationCenterSavedData" object:nil];
 
-    __weak typeof(self) weakSelf = self;
-    [self.downloadModels enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        HJDownloadModel *model = obj;
-        [weakSelf suspendWithDownloadModel:model];
-    }];
+
+- (void)startAllDownloadTasks;{
     
+    [self operateTasksWithOperationType:kHJOperationType_start];
 }
 
 
@@ -159,9 +159,20 @@ static id instace = nil;
 }
 
 
+- (void)saveDownloadModels{
+    [[NSUserDefaults standardUserDefaults] setObject:@YES forKey:hj_UIApplicationWillTerminate];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    __weak typeof(self) weakSelf = self;
+    [self.downloadModels enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        HJDownloadModel *model = obj;
+        [weakSelf suspendWithDownloadModel:model];
+        if (idx == (_downloadModels.count - 1)) {
+            [self saveData];
+        }
+    }];
+}
 
 - (void)saveData{
-
     NSFileManager *fileManager = [NSFileManager defaultManager];
     [fileManager removeItemAtPath:hj_savedDownloadModelsFilePath error:nil];
     BOOL flag = [NSKeyedArchiver archiveRootObject:self.downloadModels toFile:hj_savedDownloadModelsFilePath];
@@ -187,9 +198,10 @@ static id instace = nil;
     __weak typeof(self) weakSelf = self;
     [self.downloadModels enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
         HJDownloadModel *downloadModel = obj;
-        [weakSelf stopWithDownloadModel:downloadModel];
-        
         switch (operationType) {
+            case kHJOperationType_start:
+                [weakSelf startWithDownloadModel:downloadModel];
+                break;
             case kHJOperationType_suspend:
                 [weakSelf suspendWithDownloadModel:downloadModel];
                 break;
@@ -210,12 +222,13 @@ static id instace = nil;
 
     if (!_downloadModels) {
         
-        
         NSFileManager *fileManager = [NSFileManager defaultManager];
         BOOL exist = [fileManager fileExistsAtPath:hj_savedDownloadModelsFilePath isDirectory:nil];
         
         if (exist) {
           _downloadModels = [NSKeyedUnarchiver  unarchiveObjectWithFile:hj_savedDownloadModelsFilePath];
+            NSError *error = nil;
+            [fileManager removeItemAtPath:hj_savedDownloadModelsFilePath error:&error];
         }else{
             _downloadModels = [NSMutableArray array];
         }
@@ -287,6 +300,10 @@ static id instace = nil;
     return _backgroundSession;
 }
 
+- (NSURLSession *)currentSession{
+    return self.backgroundDownload?self.backgroundSession:self.session;
+}
+
 
 #pragma mark - NSURLSessionDownloadDelegate
 - (void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask
@@ -345,11 +362,13 @@ didCompleteWithError:(nullable NSError *)error;{
         if (!error) {
             task.downloadModel.status = kHJDownloadStatusCompleted;
             [task.downloadModel.operation downloadFinished];
+        }else if (task.downloadModel.status == kHJDownloadStatus_suspended){
+            
+        }else if (task.downloadModel.status == kHJDownloadStatusCancel){
+        
         }else if ( [error code]<0){
             // 网络异常
             task.downloadModel.status = kHJDownloadStatusFailed;
-        }else if (task.downloadModel.status == kHJDownloadStatus_suspended){
-    
         }
         
     });
@@ -358,7 +377,7 @@ didCompleteWithError:(nullable NSError *)error;{
 
 - (void)URLSessionDidFinishEventsForBackgroundURLSession:(NSURLSession *)session{
     //后台任务下载完成回调
-    AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
+    AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
     if (appDelegate.backgroundSessionCompletionHandler) {
         void(^completeHandler)() = appDelegate.backgroundSessionCompletionHandler;
         completeHandler();

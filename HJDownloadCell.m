@@ -99,23 +99,14 @@ static const CGFloat btnWidth = 44;
 #pragma mark - Event Response
 - (void)startAction:(UIButton *)sender{
     
-    [[HJDownloadManager sharedManager] startWithDownloadModel:self.downloadModel background:NO];
+    [[HJDownloadManager sharedManager] startWithDownloadModel:self.downloadModel];
 }
 
 
 - (void)pauseAction:(UIButton *)sender{
-    
-    if(self.downloadModel.status == kHJDownloadStatus_suspended){
-        [_pauseBtn setTitle:@"暂停" forState:UIControlStateNormal];
-        [[HJDownloadManager sharedManager] resumeWithDownloadModel:self.downloadModel];
-    }else if(self.downloadModel.status == kHJDownloadStatus_Running){
-        [_pauseBtn setTitle:@"继续" forState:UIControlStateNormal];
-        [[HJDownloadManager sharedManager] suspendWithDownloadModel:self.downloadModel];
-    }else{
-    
-    }
 
-    
+        [[HJDownloadManager sharedManager] suspendWithDownloadModel:self.downloadModel];
+
 }
 
 - (void)stopAction:(UIButton *)sender{

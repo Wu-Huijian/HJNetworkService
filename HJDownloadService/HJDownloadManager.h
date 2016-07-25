@@ -10,14 +10,15 @@
 
 
 typedef NS_ENUM(NSUInteger, HJOperationType) {
-    kHJOperationType_suspend = 1,
+    kHJOperationType_start,
+    kHJOperationType_suspend ,
     kHJOperationType_resume,
     kHJOperationType_stop
 };
 
+#define kHJDownloadManager [HJDownloadManager sharedManager]
 
 @class HJDownloadModel;
-
 
 @interface HJDownloadManager : NSObject
 
@@ -28,7 +29,11 @@ typedef NS_ENUM(NSUInteger, HJOperationType) {
 
 @property (nonatomic, strong, readonly) NSMutableArray * downloadingModels;
 
+@property (nonatomic, strong, readonly) NSURLSession * currentSession;
+
 @property (nonatomic, assign) NSInteger maxConcurrentOperationCount;
+
+@property (nonatomic, assign) BOOL backgroundDownload;//是否后台下载
 
 + (instancetype)sharedManager;
 /**
@@ -45,7 +50,7 @@ typedef NS_ENUM(NSUInteger, HJOperationType) {
  *  @param background 是否支持后台下载
  */
 
-- (void)startWithDownloadModel:(HJDownloadModel *)model background:(BOOL)background;
+- (void)startWithDownloadModel:(HJDownloadModel *)model;
 /**
  *  暂停下载
  */
@@ -60,9 +65,16 @@ typedef NS_ENUM(NSUInteger, HJOperationType) {
  */
 - (void)stopWithDownloadModel:(HJDownloadModel *)model;
 
+
+
+
+- (void)startAllDownloadTasks;
+
 - (void)suspendAllDownloadTasks;
 
 - (void)resumeAllDownloadTasks;
+
+- (void)stopAllDownloadTasks;
 
 /**
  *  保存数据(未实现)

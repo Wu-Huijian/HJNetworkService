@@ -7,19 +7,15 @@
 //
 
 #import "HJDownloadModel.h"
-#import "HJDownloadOperation.h"
-#import "MJExtension.h"
+#import "HJDownloadHeaders.h"
+
 @implementation HJDownloadModel
 
 MJCodingImplementation
 
-#define BasePath [[NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) objectAtIndex:0] stringByAppendingFormat:@"/Caches/"]
 
 - (NSString *)destinationPath{
-    if (!_destinationPath) {
         _destinationPath = [[BasePath stringByAppendingString:self.fileName] stringByAppendingString:self.fileFormat];
-    }
-    
     return _destinationPath;
 }
 
@@ -27,9 +23,22 @@ MJCodingImplementation
 - (NSString *)fileName{
     if (!_fileName) {
         NSTimeInterval timeInterval = [[NSDate date]timeIntervalSince1970];
-        _fileName = [NSString stringWithFormat:@"%d",(int)timeInterval];
+        //解决多个任务同时开始时 文件重名问题
+        NSString *timeStr = [NSString stringWithFormat:@"%.6f",timeInterval];
+        timeStr = [timeStr stringByReplacingOccurrencesOfString:@"." withString:@"_"];
+        _fileName = [NSString stringWithFormat:@"%@",timeStr];
     }
     return _fileName;
+}
+
+- (NSString *)fileFormat{
+    if (!_fileFormat && _urlString) {
+        NSArray *urlArr = [_urlString componentsSeparatedByString:@"."];
+        if (urlArr && urlArr.count>1) {
+            self.fileFormat = [@"." stringByAppendingString:[urlArr lastObject]];
+        }
+    }
+    return _fileFormat;
 }
 
 
@@ -83,8 +92,14 @@ MJCodingImplementation
         case kHJDownloadStatusFailed:
             self.statusText = @"下载失败";
             break;
-        case kHJDownloadStatusCancel:
+        case kHJDownloadStatusCancel:{
             self.statusText = @"取消下载";
+            self.progress = 0;
+            self.resumeData = nil;
+            self.fileName = nil;
+            self.fileFormat = nil;
+            self.operation = nil;
+        }
             break;
         case kHJDownloadStatusWaiting:
             self.statusText = @"等待下载";
@@ -100,6 +115,17 @@ MJCodingImplementation
     }
 
     NSLog(@"%@%@==%@",self.fileName,self.fileFormat,self.statusText);
+}
+
+
+
+- (NSString *)tmpFilePath{
+    if (_tmpFilePath) {
+        NSArray *foloders = [_tmpFilePath componentsSeparatedByString:@"/"];
+        NSString *currentPath = [NSHomeDirectory() stringByAppendingPathComponent:@"tmp"];
+        _tmpFilePath = [currentPath stringByAppendingPathComponent:[foloders lastObject]];
+    }
+    return  _tmpFilePath;
 }
 
 
